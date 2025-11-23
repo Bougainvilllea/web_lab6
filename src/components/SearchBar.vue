@@ -35,7 +35,7 @@ watch(searchQuery, (newQuery) => {
 
 .search-input {
   width: 100%;
-  padding: 1rem 1rem 1rem 0.001rem;
+  padding: 1rem 1rem 1rem 1rem;
   border: 2px solid #e1e5e9;
   border-radius: 12px;
   font-size: 1rem;

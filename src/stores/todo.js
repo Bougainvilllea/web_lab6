@@ -1,30 +1,28 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { useAuthStore } from './auth'
 
 export const useTodoStore = defineStore('todo', () => {
-  const tasks = ref(JSON.parse(localStorage.getItem('tasks')) || [])
+  const tasks = ref([])
   const filter = ref('all')
   
-  const auth = useAuthStore()
+  // Загружаем задачи из localStorage
+  if (localStorage.getItem('tasks')) {
+    tasks.value = JSON.parse(localStorage.getItem('tasks'))
+  }
   
   const filteredTasks = computed(() => {
-    const userTasks = tasks.value.filter(t => t.userId === auth.user?.id)
-    
     switch (filter.value) {
-      case 'completed': return userTasks.filter(t => t.completed)
-      case 'active': return userTasks.filter(t => !t.completed)
-      default: return userTasks
+      case 'completed': return tasks.value.filter(t => t.completed)
+      case 'active': return tasks.value.filter(t => !t.completed)
+      default: return tasks.value
     }
   })
   
   function addTask(text) {
     const task = {
       id: Date.now(),
-      text,
-      completed: false,
-      userId: auth.user.id,
-      createdAt: new Date().toISOString()
+      text: text.trim(),
+      completed: false
     }
     tasks.value.push(task)
     saveToLocalStorage()
@@ -45,9 +43,8 @@ export const useTodoStore = defineStore('todo', () => {
   
   function editTask(id, newText) {
     const task = tasks.value.find(t => t.id === id)
-    if (task && newText.trim()) {
+    if (task) {
       task.text = newText.trim()
-      task.updatedAt = new Date().toISOString()
       saveToLocalStorage()
     }
   }
@@ -62,9 +59,7 @@ export const useTodoStore = defineStore('todo', () => {
     filteredTasks, 
     addTask, 
     deleteTask, 
-    toggleTask,
-    editTask
+    toggleTask, 
+    editTask 
   }
-}, {
-  persist: true
 })

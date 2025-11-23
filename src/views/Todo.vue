@@ -1,46 +1,93 @@
 <template>
-  <div class="todo-container">
-    <div class="todo-card">
-      <h1>Мои задачи:</h1>
-      
-      <div class="controls">
+  <div class="todo">
+    <div class="input-section">
+      <input 
+        v-model="newTask" 
+        @keyup.enter="addTask" 
+        placeholder="Введите задачу и нажмите Enter"
+        class="task-input"
+      >
+      <select v-model="filter" class="filter-select">
+        <option value="all">Все</option>
+        <option value="active">Активные</option>
+        <option value="completed">Завершенные</option>
+      </select>
+    </div>
+
+    <div class="search-section">
+      <div class="search-bar">
         <input 
-          v-model="newTask" 
-          @keyup.enter="addTask" 
-          placeholder="Введите задачу и нажмите enter"
-          class="task-input"
+          v-model="searchQuery" 
+          @input="handleSearch" 
+          placeholder="Поиск по задачам..."
+          class="search-input"
         >
         
-        <div class="controls-right">
-          <SearchBar @search="handleSearch" />
-          <select v-model="todoStore.filter" class="filter-select">
-            <option value="all">Все⚪</option>
-            <option value="active">Активные❌</option>
-            <option value="completed">Завершенные✔️</option>
-          </select>
+      </div>
+    </div>
+    
+    <div class="tasks">
+      <div v-for="task in sortedAndSearchedTasks" :key="task.id" class="task-item">
+        <input 
+          type="checkbox" 
+          :checked="task.completed" 
+          @change="toggleTask(task.id)"
+          class="task-checkbox"
+        >
+        
+        <div v-if="editingTaskId === task.id" class="edit-mode">
+          <input 
+            v-model="editText" 
+            @keyup.enter="saveEdit(task.id)"
+            @keyup.escape="cancelEdit"
+            @blur="saveEdit(task.id)"
+            class="edit-input"
+            ref="editInputRef"
+          >
+        </div>
+        <div v-else class="view-mode">
+          <span 
+            :class="{ completed: task.completed }"
+            class="task-text"
+            @dblclick="startEditing(task)"
+          >{{ task.text }}</span>
+        </div>
+        
+        <div class="task-actions">
+          <button 
+            v-if="editingTaskId !== task.id"
+            @click="startEditing(task)" 
+            class="edit-btn"
+            title="Редактировать"
+          >✏️</button>
+          <button @click="deleteTask(task.id)" class="delete-btn" title="Удалить">×</button>
         </div>
       </div>
       
-      <TodoList 
-        :tasks="filteredAndSearchedTasks"
-        :filter="todoStore.filter"
-        :empty-message="emptyMessage"
-      />
+      <p v-if="sortedAndSearchedTasks.length === 0" class="empty-message">
+        {{ getEmptyMessage() }}
+      </p>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import { useTodoStore } from '../stores/todo'
-import TodoList from '../components/TodoList.vue'
-import SearchBar from '../components/SearchBar.vue'
 
 const newTask = ref('')
 const searchQuery = ref('')
 const todoStore = useTodoStore()
+const editingTaskId = ref(null)
+const editText = ref('')
+const editInputRef = ref(null)
 
-const filteredAndSearchedTasks = computed(() => {
+const filter = computed({
+  get: () => todoStore.filter,
+  set: (value) => todoStore.filter = value
+})
+
+const filteredTasks = computed(() => {
   let tasks = todoStore.filteredTasks
   
   if (searchQuery.value.trim()) {
@@ -53,131 +100,264 @@ const filteredAndSearchedTasks = computed(() => {
   return tasks
 })
 
-const emptyMessage = computed(() => {
-  if (searchQuery.value.trim() && filteredAndSearchedTasks.value.length === 0) {
-    return 'Задач по запросу нет.'
-  }
+const sortedAndSearchedTasks = computed(() => {
+  const tasks = [...filteredTasks.value]
   
-  switch (todoStore.filter) {
-    case 'completed': return 'Завершенных задач нет.'
-    case 'active': return 'Активных задач нет.'
-    default: return 'Заметок нет... Нужно добавить.'
-  }
+  // Сначала сортируем по статусу: незавершенные сверху
+  tasks.sort((a, b) => {
+    if (a.completed && !b.completed) return 1
+    if (!a.completed && b.completed) return -1
+    return 0
+  })
+  
+  tasks.sort((a, b) => {
+    if (a.completed === b.completed) {
+      return b.id - a.id // Новые задачи (больший ID) будут первыми
+    }
+    return 0
+  })
+  
+  return tasks
 })
 
 const addTask = () => {
   if (newTask.value.trim()) {
-    todoStore.addTask(newTask.value.trim())
+    todoStore.addTask(newTask.value)
     newTask.value = ''
   }
 }
 
-const handleSearch = (query) => {
-  searchQuery.value = query
+const deleteTask = (id) => {
+  todoStore.deleteTask(id)
+}
+
+const toggleTask = (id) => {
+  todoStore.toggleTask(id)
+}
+
+const startEditing = (task) => {
+  editingTaskId.value = task.id
+  editText.value = task.text
+  nextTick(() => {
+    editInputRef.value?.focus()
+  })
+}
+
+const saveEdit = (id) => {
+  if (editText.value.trim()) {
+    todoStore.editTask(id, editText.value)
+  }
+  editingTaskId.value = null
+  editText.value = ''
+}
+
+const cancelEdit = () => {
+  editingTaskId.value = null
+  editText.value = ''
+}
+
+const handleSearch = () => {
+}
+
+const getEmptyMessage = () => {
+  if (searchQuery.value.trim()) {
+    return 'Задачи не найдены'
+  }
+  
+  switch (filter.value) {
+    case 'completed': return 'Завершенных задач пока нет'
+    case 'active': return 'Активных задач пока нет'
+    default: return 'Задач пока нет'
+  }
 }
 </script>
 
-<style scoped lang="scss">
-.todo-container {
-  max-width: 800px;
+<style scoped>
+.todo {
+  max-width: 600px;
   margin: 0 auto;
-  padding: 20px;
+  background: #ffffffff;
+  padding: 30px;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
 }
 
-.todo-card {
-  background: #f8f9fa;
-  padding: 2rem;
-  border-radius: 16px;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-  transition: all 0.3s ease;
+body.dark-theme .todo {
+  background: #c99565c2;; 
+  color: black;
 }
 
-:deep(.dark-theme) .todo-card {
-  background: #2c3e50;
-  color: #f0f0f0;
-  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-}
-
-h1 {
-  text-align: center;
-  margin-bottom: 2rem;
-  color: #2d3748;
-  font-weight: 700;
-  transition: color 0.3s ease;
-}
-
-:deep(.dark-theme) h1 {
-  color: #f0f0f0;
-}
-
-.controls {
+.input-section {
   display: flex;
-  gap: 12px;
-  margin: 20px 0;
-  align-items: center;
-  
-  @media (max-width: 768px) {
-    flex-direction: column;
-    gap: 12px;
-  }
+  gap: 15px;
+  margin-bottom: 20px;
 }
 
 .task-input {
   flex: 1;
-  padding: 1rem;
+  padding: 12px;
   border: 2px solid #e1e5e9;
-  border-radius: 12px;
-  font-size: 1rem;
-  background: white;
-  color: #2d3748;
-  transition: all 0.3s ease;
-
-  &:focus {
-    outline: none;
-    border-color: #6C63FF;
-  }
+  border-radius: 8px;
+  font-size: 16px;
+  transition: border-color 0.3s;
 }
 
-:deep(.dark-theme) .task-input {
-  background: #34495e;
-  border-color: #4a6572;
-  color: #f0f0f0;
-
-  &::placeholder {
-    color: #bdc3c7;
-  }
-}
-
-.controls-right {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  
-  @media (max-width: 480px) {
-    flex-direction: column;
-    width: 100%;
-  }
+.task-input:focus {
+  outline: none;
+  border-color: #6C63FF;
 }
 
 .filter-select {
-  padding: 1rem;
+  padding: 12px;
   border: 2px solid #e1e5e9;
-  border-radius: 12px;
+  border-radius: 8px;
   background: white;
-  color: #2d3748;
-  font-size: 1rem;
-  transition: all 0.3s ease;
-  min-width: 160px;
-  
-  &:focus {
-    outline: none;
-    border-color: #6C63FF;
-  }
+  font-size: 14px;
+  min-width: 140px;
 }
 
-:deep(.dark-theme) .filter-select {
-  background: #34495e;
-  border-color: #4a6572;
-  color: #f0f0f0;
+.search-section {
+  margin-bottom: 25px;
+}
+
+.search-bar {
+  position: relative;
+  width: 100%;
+}
+
+.search-input {
+  width: 100%;
+  padding: 12px 12px 12px 1px;
+  border: 2px solid #e1e5e9;
+  border-radius: 8px;
+  font-size: 16px;
+  transition: border-color 0.3s;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: #6C63FF;
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #6c757d;
+  pointer-events: none;
+}
+
+.tasks {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.task-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  transition: all 0.3s;
+}
+
+.task-item:hover {
+  background: #e9ecef;
+  transform: translateY(-1px);
+}
+
+.task-checkbox {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: #6C63FF;
+}
+
+.view-mode {
+  flex: 1;
+}
+
+.task-text {
+  font-size: 16px;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 6px;
+  transition: background-color 0.2s;
+}
+
+.task-text:hover {
+  background: rgba(108, 99, 255, 0.1);
+}
+
+.task-text.completed {
+  text-decoration: line-through;
+  color: #6c757d;
+}
+
+.edit-mode {
+  flex: 1;
+}
+
+.edit-input {
+  width: 100%;
+  padding: 10px 1px;
+  border: 2px solid #6C63FF;
+  border-radius: 6px;
+  font-size: 16px;
+  background: white;
+}
+
+.edit-input:focus {
+  outline: none;
+}
+
+.task-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.edit-btn, .delete-btn {
+  border: none;
+  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s;
+}
+
+.edit-btn {
+  background: #ffd166;
+  color: #333;
+}
+
+.edit-btn:hover {
+  background: #ffc847;
+  transform: scale(1.05);
+}
+
+.delete-btn {
+  background: #ff6b6b;
+  color: white;
+  font-weight: bold;
+}
+
+.delete-btn:hover {
+  background: #ff5252;
+  transform: scale(1.05);
+}
+
+.empty-message {
+  text-align: center;
+  color: #000000ff;
+  font-style: italic;
+  padding: 40px;
+  font-size: 16px;
 }
 </style>

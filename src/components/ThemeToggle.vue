@@ -10,7 +10,6 @@ import { ref, onMounted } from 'vue'
 const isDarkTheme = ref(false)
 const emit = defineEmits(['themeChange'])
 
-// Загружаем тему из localStorage при загрузке
 onMounted(() => {
   const savedTheme = localStorage.getItem('darkTheme')
   isDarkTheme.value = savedTheme === 'true'
